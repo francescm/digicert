@@ -25,12 +25,14 @@ namespace :exec do
               end
 
     dns_names = if config[:dns_names]
-                 config[:dns_names]
-               end
+                  config[:dns_names]
+                end
 
-    renewal_of_order_id = false
+    renewal_of_order_id = if config[:renewal_of_order_id]
+                            config[:renewal_of_order_id]
+                          end
 
-    if config[:renewal]
+    if config[:renewal] and ! config[:renewal_of_order_id]
       old_cert = Digicert::Order.all(
           filters: {
               status: "issued",
@@ -84,15 +86,29 @@ namespace :exec do
     content = Digicert::CertificateDownloader.fetch_content(certificate_id)
     File.write("#{path}/#{cert_dn}.pem", content[:text])
   end
-end
 
-private
+  desc "Query certificate"
+  task :query => :setup do
+    cert_dn = get_dn_from_env
+    order = Digicert::Order.all(
+        filters: {
+            status: "issued",
+            common_name: cert_dn
+        }
+    ).first
+    puts order.certificate
 
-def get_dn_from_env
-  if ENV["DN"]
-    ENV["DN"]
-  else
-    puts "A dn is needed as a env variable"
-    exit 0
+  end
+
+
+  private
+
+  def get_dn_from_env
+    if ENV["DN"]
+      ENV["DN"]
+    else
+      puts "A dn is needed as a env variable"
+      exit 0
+    end
   end
 end
