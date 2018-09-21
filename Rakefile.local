@@ -1,0 +1,98 @@
+require "digicert"
+require "yaml"
+
+
+namespace :exec do
+  task :setup do
+    Digicert.configuration.api_key = File.read(".secret")
+  end
+
+  desc "Issues a ssl_multi_domain order"
+  task :order => :setup do
+    cert_dn = get_dn_from_env
+    config = YAML.load_file "#{cert_dn}.yaml"
+
+    validity_years = if config[:validity_years]
+                       config[:validity_years]
+                     else
+                       "3"
+                     end
+
+    comment = if config[:comment]
+                config[:comment]
+              else
+                "Request by api call at #{Time.now.strftime('%H:%M')}"
+              end
+
+    dns_names = if config[:dns_names]
+                 config[:dns_names]
+               end
+
+    renewal_of_order_id = false
+
+    if config[:renewal]
+      old_cert = Digicert::Order.all(
+          filters: {
+              status: "issued",
+              common_name: cert_dn
+          }
+      ).first
+
+      renewal_of_order_id = old_cert.id
+
+      dns_names ||= old_cert.certificate.dns_names
+    end
+
+    dns_names ||= cert_dn
+
+    csr = File.read("#{config[:path]}/#{cert_dn}.csr")
+
+    unimore = Digicert::Organization.all.last
+
+    order_attrs = {certificate: {common_name: cert_dn,
+                                 dns_names: dns_names,
+                                 csr: csr,
+                                 signature_hash: "sha256"},
+                   organization: {id: unimore.id},
+                   validity_years: validity_years,
+                   comments: comment,
+                   disable_renewal_notifications: false,
+                   renewal_of_order_id: renewal_of_order_id,
+                   disable_ct: false}
+
+    puts order_attrs
+    Digicert::Order.create("ssl_multi_domain", order_attrs)
+  end
+
+  desc "Download issued public certificate"
+  task :download => :setup do
+    cert_dn = get_dn_from_env
+
+    path = if ENV["CERT_PATH"]
+             ENV["CERT_PATH"]
+           else
+             "/crypt/tcs/certs"
+           end
+    order = Digicert::Order.all(
+        filters: {
+            status: "issued",
+            common_name: cert_dn
+        }
+    ).first
+
+    certificate_id = order.certificate.id
+    content = Digicert::CertificateDownloader.fetch_content(certificate_id)
+    File.write("#{path}/#{cert_dn}.pem", content[:text])
+  end
+end
+
+private
+
+def get_dn_from_env
+  if ENV["DN"]
+    ENV["DN"]
+  else
+    puts "A dn is needed as a env variable"
+    exit 0
+  end
+end
