@@ -41,6 +41,6 @@ order with the same ``dn``.
 
 ### Download the issued certificate
 
-    bundle exec rake -f Rakefile.local exec:query CERT_PATH=/opt/secure DN=hq.example.org
+    bundle exec rake -f Rakefile.local exec:download CERT_PATH=/opt/secure DN=hq.example.org
 
-`CERT_PATH` is the download path.
+`CERT_PATH is the download path.
