@@ -33,12 +33,7 @@ namespace :exec do
                           end
 
     if config[:renewal] and ! config[:renewal_of_order_id]
-      old_cert = Digicert::Order.all(
-          filters: {
-              status: "issued",
-              common_name: cert_dn
-          }
-      ).first
+      old_cert = get_orders(cert_dn).last
 
       renewal_of_order_id = old_cert.id
 
@@ -75,12 +70,7 @@ namespace :exec do
            else
              "/crypt/tcs/certs"
            end
-    order = Digicert::Order.all(
-        filters: {
-            status: "issued",
-            common_name: cert_dn
-        }
-    ).first
+    order = get_orders(cert_dn).last
 
     certificate_id = order.certificate.id
     content = Digicert::CertificateDownloader.fetch_content(certificate_id)
@@ -90,13 +80,9 @@ namespace :exec do
   desc "Query certificate"
   task :query => :setup do
     cert_dn = get_dn_from_env
-    order = Digicert::Order.all(
-        filters: {
-            status: "issued",
-            common_name: cert_dn
-        }
-    ).first
-    puts order.certificate
+    orders = get_orders cert_dn
+
+    puts orders.last.certificate
 
   end
 
@@ -110,5 +96,14 @@ namespace :exec do
       puts "A dn is needed as a env variable"
       exit 0
     end
+  end
+
+  def get_orders(dn)
+    Digicert::Order.all(
+        filters: {
+            status: "issued",
+            common_name: dn
+        }
+    ).sort {|a, b| a.certificate.valid_till <=> b.certificate.valid_till}
   end
 end
